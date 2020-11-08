@@ -87,7 +87,7 @@ module BranchAndBound
 
     function build_initial_model(lp_relax)
         # criando um model "vazio" no gurobi
-        global model = Model(Gurobi.Optimizer)
+        global model = direct_model(Gurobi.Optimizer())
 
         # setando alguns parâmetros específicos do Gurobi
         set_optimizer_attribute(model, "LogToConsole", 0)
@@ -253,6 +253,7 @@ module BranchAndBound
         sol = zeros(input.n_vertices,input.n_cores)
         copy_solution(sol)
         statistics.objective_value = solution_value(sol)
+        statistics.n_BB_nodes = MOI.get(model, Gurobi.ModelAttribute("NodeCount"))
 
         print_solution(sol)
     end
