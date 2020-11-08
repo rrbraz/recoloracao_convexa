@@ -45,7 +45,6 @@ function resolve_recoloracao_convexa(n_vertices, n_cores, c)
     for v in 1:n_vertices
         for k in 1:n_cores
             if k != c[v]
-                println(string("Adicionando x[", v, ",", k, "]"))
                 add_to_expression!(trocas_de_cor, x[v,k])
             end
         end
@@ -81,7 +80,7 @@ function resolve_recoloracao_convexa(n_vertices, n_cores, c)
         imprime_solucao(x, n_vertices, n_cores, c)
     else
         println()
-        println_in_yellow(string("Erro: Solver não encontrou solução ótima. Status = ", termination_status(modelo)))
+        println(string("Erro: Solver não encontrou solução ótima. Status = ", termination_status(modelo)))
     end
 end
 
