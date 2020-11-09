@@ -316,8 +316,6 @@ module BranchAndBound
             
             # --- 1.1 Global LB >= UB ? ---
             if is_root_node == false
-                update_LB(root_node)
-
                 if root_node.LB >= z_ + ϵ
                     break
                 end
@@ -347,6 +345,7 @@ module BranchAndBound
             else
                 z_i = objective_value(model)
                 n_i.LB = z_i
+                update_parent_LB(n_i)
 
                 if is_root_node
                     statistics.first_linear_relax_val = z_i
@@ -378,12 +377,12 @@ module BranchAndBound
         print_solution(best_sol)
     end
 
-    function update_LB(node)
-        if isnothing(node.left_child) || isnothing(node.right_child)
-            return node.LB
+    function update_parent_LB(node)        
+        parent = node.parent
+        if !isnothing(parent)
+            parent.LB = min(parent.left_child.LB, parent.right_child.LB)
+            update_parent_LB(parent)
         end
-
-        return node.LB = min(update_LB(node.left_child), update_LB(node.left_child))
     end
 
     function print_solution(sol)
