@@ -27,13 +27,10 @@ module BranchAndBound
 
     mutable struct Config
         turn_heuristic_on::Bool
-        turn_cuts_on::Bool
-        num_max_cuts_per_iter::Int16
-        violation_threshold::Float64
         time_limit::Float64
 
         function Config()
-            return new(true, true, 10, 0.001, 1800.0)
+            return new(true, 1800.0)
         end
     end
 
@@ -303,7 +300,6 @@ module BranchAndBound
         # 0. Initialize
         CPUtic()
         build_initial_model(true)
-        n_added_cuts_curr_iter = 0
         best_sol, z_ = heuristic()
         n_0 = create_BB_node(CartesianIndex(-1, -1), false, nothing, 0)
         L = []
