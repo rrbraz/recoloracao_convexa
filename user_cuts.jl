@@ -19,9 +19,10 @@ module BranchAndBound
         turn_heuristic_on::Bool
         time_limit::Float64
         mode::Mode
+        problema_separacao
 
         function Config()
-            return new(true, 1800.0, basic)
+            return new(true, 1800.0, basic, nothing)
         end
     end
 
@@ -151,7 +152,51 @@ module BranchAndBound
         end
     end
 
-    function build_sep_ineq_convex(v, k)
+    function ineq_separacao_quad(v, k)
+        # versão quadrática do problema da separação
+        mais = fill(-Inf, length(v))
+        menos = fill(-Inf, length(v))
+
+        mais[1] = v[1]
+        p = 1
+        q = 1
+
+        for r in 2:length(v)
+            mais[r] = max(v[r], menos[q] + v[r])
+            menos[r] = mais[p] - v[r]
+            p = argmax(mais)
+            q = argmax(menos)
+        end
+        
+        i = p
+        if (mais[i] > 1 + ϵ)
+            # println(mais)
+            # println(menos)
+            sinal = 1
+            expr = AffExpr()
+            while (i >= 1 && sinal == 1) || (i >= 2)
+                if sinal == 1
+                    i = argmax(mais[1:i])
+                    add_to_expression!(expr, sinal, x[i,k])
+                else
+                    i = argmax(menos[1:i])
+                    if (menos[i] < 0)
+                        break
+                    end
+                    add_to_expression!(expr, sinal, x[i,k])                    
+                end
+                sinal *= -1
+                i -= 1
+            end
+            constraint = @build_constraint(expr <= 1)
+            # println(expr)
+            # println()
+            return constraint
+        end
+    end
+
+    function ineq_separacao_lin(v, k)
+        # versão linear do problema da separação
         mais = fill(-Inf, length(v))
         menos = fill(-Inf, length(v))
         ant_mais = zeros(Int, length(v))
@@ -183,6 +228,8 @@ module BranchAndBound
         end
         
         if (mais[p] > 1 + ϵ)
+            # println(mais)
+            # println(menos)
             sinal = 1
             expr = AffExpr()
             while p != 0
@@ -196,6 +243,8 @@ module BranchAndBound
                 end
             end
             constraint = @build_constraint(expr <= 1)
+            # println(expr)
+            # println()
             return constraint
         end
     end
@@ -204,25 +253,29 @@ module BranchAndBound
         if cb_where != GRB_CB_MIPSOL && cb_where != GRB_CB_MIPNODE
             return
         end
-        # You can query a callback attribute using GRBcbget
+
         if cb_where == GRB_CB_MIPNODE
             resultP = Ref{Cint}()
             GRBcbget(cb_data, cb_where, GRB_CB_MIPNODE_STATUS, resultP)
             if resultP[] != Gurobi.GRB_OPTIMAL
-                return  # Solution is something other than optimal.
+                return  # Solução não é ótima
             end
         end
 
-        # Before querying `callback_value`, you must call:
+        # Antes de chamar `callback_value`, deve ser chamado:
         Gurobi.load_callback_variable_primal(cb_data, cb_where)
 
         x_val = Array{Any}(undef, input.n_vertices, input.n_cores)
         for k in 1:input.n_cores
-            for v in 1:input.n_vertices
-                x_val[v, k] = callback_value(cb_data, x[v, k])        
+            for v in 1:input.n_vertices                
+                x_val[v, k] = callback_value(cb_data, x[v, k])
+                # gambiarra para obter resultados consistentes mesmo quando o Gurobi retorna -0.0
+                if x_val[v, k] == -0.0
+                    x_val[v, k] = 0.0
+                end
             end
 
-            con = build_sep_ineq_convex(x_val[:,k], k) 
+            con = config.problema_separacao(x_val[:,k], k) 
             if con !== nothing
                 statistics.n_cuts += 1
                 if config.mode == lazy_constraints
@@ -314,7 +367,7 @@ module BranchAndBound
         println("\e[1m\e[38;2;255;255;0;249m", texto)
     end
 
-    function exec_test(instancia; turn_heuristic_on=true, mode=basic)
+    function exec_test(instancia; turn_heuristic_on=true, mode=basic, pseparacao=ineq_separacao_lin)
         init()
 
         arq_instancia = string("instancias/", instancia)
@@ -322,17 +375,24 @@ module BranchAndBound
 
         config.turn_heuristic_on = turn_heuristic_on
         config.mode = mode
+        config.problema_separacao = pseparacao
         solve_IP()
     end
 
-    function exec_tests(;turn_heuristic_on=true, mode=basic)
-        open("$mode.csv", "w") do io
+    function exec_tests(;turn_heuristic_on=true, mode=basic, pseparacao=ineq_separacao_lin)
+        if pseparacao == ineq_separacao_quad
+            filename = "$(mode)_quad.csv"
+        else
+            filename = "$mode.csv"
+        end
+
+        open(filename, "w") do io
             write(io, "size;colors;obj_val;vars;constrs;nonzeros;bb_nodes;itercount;cuts;runtime\n")
         
             for instance_size in [10, 20, 30, 40, 50]
                 for n_colors in 2:10
                     instance = "rand_$(instance_size)_$(n_colors).txt"
-                    exec_test(instance, turn_heuristic_on=turn_heuristic_on, mode=mode)
+                    exec_test(instance, turn_heuristic_on=turn_heuristic_on, mode=mode, pseparacao=pseparacao)
                     line = string(
                         instance_size, ";", 
                         n_colors, ";", 
@@ -352,5 +412,5 @@ module BranchAndBound
         end
     end
 
-    exec_tests(mode=basic)
+    exec_tests(mode=lazy_constraints, pseparacao=ineq_separacao_lin)
 end;
